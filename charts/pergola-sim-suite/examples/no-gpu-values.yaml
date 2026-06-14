@@ -1,0 +1,71 @@
+# No-GPU overlay: validates the chart and that images boot on a CPU-only cluster
+# (kind / minikube / Docker Desktop). NOT for production — Gazebo falls back to
+# slow software rendering and MATLAB/Simulink will sit at the licensing screen
+# unless you point them at a real license server.
+#
+#   helm install test ./pergola-sim-suite -f examples/no-gpu-values.yaml
+#
+# To exercise the chart structure alone without pulling the multi-GB MATLAB
+# image, also add: --set matlab.enabled=false --set simulink.enabled=false
+
+global:
+  gpu:
+    # Leave nodeSelector/tolerations empty so pods schedule on any node.
+    nodeSelector: {}
+    tolerations: []
+    runtimeClassName: ""
+  mathworks:
+    # Required for MATLAB/Simulink to render. Use a real server to actually
+    # license; otherwise the containers start but stay unlicensed.
+    acceptLicense: true
+    licenseServer: "27000@license.example.com"
+  storageClass: ""        # use the cluster default
+
+gazebo:
+  enabled: true
+  replicaCount: 1
+  gpu:
+    enabled: false        # <-- drops the nvidia.com/gpu request; software rendering
+  resources:
+    requests:
+      cpu: "500m"
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  persistence:
+    enabled: false        # avoid PVC provisioning during a throwaway test
+
+matlab:
+  enabled: true
+  replicaCount: 1
+  gpu:
+    enabled: false
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: "500m"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+simulink:
+  enabled: true
+  replicaCount: 1
+  interactive: false
+  gpu:
+    enabled: false
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: "500m"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+ingress:
+  enabled: false

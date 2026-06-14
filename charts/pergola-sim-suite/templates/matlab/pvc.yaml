@@ -1,0 +1,21 @@
+{{- if and .Values.matlab.enabled .Values.matlab.persistence.enabled }}
+{{- $component := "matlab" }}
+{{- $m := .Values.matlab }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  accessModes:
+    - {{ $m.persistence.accessMode }}
+  {{- $sc := $m.persistence.storageClass | default .Values.global.storageClass }}
+  {{- if $sc }}
+  storageClassName: {{ $sc }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $m.persistence.size }}
+{{- end }}

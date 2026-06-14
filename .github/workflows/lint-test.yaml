@@ -1,0 +1,34 @@
+name: Lint Charts
+
+# Lints charts on PRs that touch them. Install/integration testing is
+# intentionally omitted: the MATLAB image requires a license server and the
+# Gazebo image is user-supplied, so a CI `ct install` cannot run unattended.
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/lint-test.yaml'
+      - '.github/ct.yaml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+
+      - name: Run chart-testing (lint)
+        run: ct lint --config .github/ct.yaml

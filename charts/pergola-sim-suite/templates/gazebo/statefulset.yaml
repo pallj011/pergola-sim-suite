@@ -1,0 +1,150 @@
+{{- if .Values.gazebo.enabled }}
+{{- $component := "gazebo" }}
+{{- $g := .Values.gazebo }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $g.replicaCount }}
+  serviceName: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}-headless
+  selector:
+    matchLabels:
+      {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "suite.labels" . | nindent 8 }}
+        {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 8 }}
+      {{- with $g.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "suite.imagePullSecrets" . | nindent 6 }}
+      {{- if $g.gpu.enabled }}
+      {{- $rc := include "suite.gpu.runtimeClass" (dict "ctx" .) }}
+      {{- with $rc }}
+      {{ . }}
+      {{- end }}
+      {{- end }}
+      nodeSelector:
+        {{- if $g.gpu.enabled }}
+        {{- include "suite.gpu.nodeSelector" (dict "ctx" .) | nindent 8 }}
+        {{- end }}
+        {{- with $g.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      tolerations:
+        {{- if $g.gpu.enabled }}
+        {{- include "suite.gpu.tolerations" (dict "ctx" .) | nindent 8 }}
+        {{- end }}
+        {{- with $g.tolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $g.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gazebo
+          image: {{ include "suite.image" (dict "ctx" . "repository" $g.image.repository "tag" $g.image.tag) }}
+          imagePullPolicy: {{ $g.image.pullPolicy }}
+          # Headless GPU server. gz sim renders with the ogre2/EGL engine on the GPU.
+          command: ["gz"]
+          args:
+            - "sim"
+            - "--headless-rendering"
+            - "-s"
+            - "-v"
+            - "4"
+            {{- range $g.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+            - {{ $g.world | quote }}
+          env:
+            - name: DISPLAY
+              value: ":0"
+            - name: GZ_HEADLESS_RENDERING
+              value: "1"
+            {{- if $g.gpu.enabled }}
+            # GPU path: render through EGL on the NVIDIA driver, no X server needed.
+            - name: __GLX_VENDOR_LIBRARY_NAME
+              value: "nvidia"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+            {{- else }}
+            # CPU fallback: software rasterization (LLVMpipe) so the sim runs on
+            # GPU-less nodes for chart/image testing. Slow, not for production.
+            - name: LIBGL_ALWAYS_SOFTWARE
+              value: "1"
+            - name: GALLIUM_DRIVER
+              value: "llvmpipe"
+            {{- end }}
+            - name: GZ_PARTITION
+              value: "$(POD_NAME)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: transport
+              containerPort: {{ $g.service.transportPort }}
+          resources:
+            requests:
+              {{- toYaml $g.resources.requests | nindent 14 }}
+            limits:
+              {{- toYaml $g.resources.limits | nindent 14 }}
+              {{- if $g.gpu.enabled }}
+              {{ include "suite.gpu.resources" (dict "ctx" . "count" $g.gpu.count) }}
+              {{- end }}
+          {{- if $g.persistence.enabled }}
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ $g.persistence.mountPath }}
+          {{- end }}
+        {{- if $g.novnc.enabled }}
+        # Browser-based visualization of the running simulator.
+        - name: novnc
+          image: {{ include "suite.image" (dict "ctx" . "repository" $g.novnc.image.repository "tag" $g.novnc.image.tag) }}
+          env:
+            - name: DISPLAY_WIDTH
+              value: "1920"
+            - name: DISPLAY_HEIGHT
+              value: "1080"
+            - name: RUN_XTERM
+              value: "no"
+          ports:
+            - name: novnc
+              containerPort: {{ $g.novnc.port }}
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+        {{- end }}
+  {{- if $g.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+        labels:
+          {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ $g.persistence.accessMode }}
+        {{- $sc := $g.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $sc }}
+        storageClassName: {{ $sc }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $g.persistence.size }}
+  {{- end }}
+{{- end }}

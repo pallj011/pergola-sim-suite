@@ -1,0 +1,36 @@
+name: Release Charts
+
+# Publishes packaged charts + index.yaml to the gh-pages branch whenever a
+# chart version changes on the default branch. chart-releaser only releases
+# charts whose version in Chart.yaml has not already been released.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write   # create releases + push to gh-pages
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          charts_dir: charts

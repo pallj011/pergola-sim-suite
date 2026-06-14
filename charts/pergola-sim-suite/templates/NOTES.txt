@@ -1,0 +1,44 @@
+
+{{ include "suite.name" . }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Components:
+{{- if .Values.gazebo.enabled }}
+  ✓ Gazebo   — {{ .Values.gazebo.replicaCount }} GPU simulator instance(s)
+{{- else }}
+  ✗ Gazebo   — disabled
+{{- end }}
+{{- if .Values.matlab.enabled }}
+  ✓ MATLAB   — {{ .Values.matlab.replicaCount }} instance(s){{ if .Values.matlab.gpu.enabled }} (GPU){{ end }}
+{{- else }}
+  ✗ MATLAB   — disabled
+{{- end }}
+{{- if .Values.simulink.enabled }}
+  ✓ Simulink — {{ .Values.simulink.replicaCount }} {{ if .Values.simulink.interactive }}interactive{{ else }}headless batch{{ end }} instance(s)
+{{- else }}
+  ✗ Simulink — disabled
+{{- end }}
+
+Access:
+{{- if .Values.ingress.enabled }}
+  Ingress host: http://{{ .Values.ingress.host }}/
+    {{- if .Values.matlab.enabled }}
+    MATLAB:   http://{{ .Values.ingress.host }}/matlab
+    {{- end }}
+    {{- if and .Values.simulink.enabled .Values.simulink.interactive }}
+    Simulink: http://{{ .Values.ingress.host }}/simulink
+    {{- end }}
+    {{- if and .Values.gazebo.enabled .Values.gazebo.novnc.enabled }}
+    Gazebo:   http://{{ .Values.ingress.host }}/gazebo
+    {{- end }}
+{{- else }}
+  No ingress. Port-forward a component, e.g.:
+  {{- if .Values.matlab.enabled }}
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "suite.componentFullname" (dict "Release" .Release "component" "matlab") }} {{ .Values.matlab.service.port }}:{{ .Values.matlab.service.port }}
+  {{- end }}
+  {{- if and .Values.gazebo.enabled .Values.gazebo.novnc.enabled }}
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "suite.componentFullname" (dict "Release" .Release "component" "gazebo") }} {{ .Values.gazebo.novnc.port }}:{{ .Values.gazebo.novnc.port }}
+  {{- end }}
+{{- end }}
+
+Check status:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of={{ include "suite.name" . }}

@@ -1,0 +1,202 @@
+# Default values for the pergola-sim-suite chart.
+# Three components ship as one suite: gazebo, matlab, simulink.
+# Each can be independently enabled/disabled and scaled.
+
+# -----------------------------------------------------------------------------
+# Global settings shared by every component.
+# -----------------------------------------------------------------------------
+global:
+  # Name of the suite; used as a prefix and for shared labels.
+  suiteName: pergola-sim-suite
+
+  imageRegistry: ""          # Optional registry prefix prepended to all images, e.g. "registry.example.com/"
+  imagePullSecrets: []       # e.g. [ { name: regcred } ]
+
+  # GPU scheduling defaults. Components opt in via their own gpu block.
+  gpu:
+    # Resource key advertised by the device plugin. nvidia.com/gpu is the common case;
+    # set to amd.com/gpu, gpu.intel.com/i915, etc. as needed.
+    resourceName: nvidia.com/gpu
+    # runtimeClassName routes pods to the NVIDIA container runtime when the
+    # cluster uses RuntimeClass (containerd + nvidia-container-runtime).
+    runtimeClassName: ""     # e.g. "nvidia"
+    # Node selector applied to every GPU-requesting pod.
+    nodeSelector: {}         # e.g. { nvidia.com/gpu.present: "true" }
+    # Tolerations so GPU workloads land on tainted GPU nodes.
+    tolerations: []          # e.g. [ { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule } ]
+
+  # Shared MathWorks license configuration. MATLAB and Simulink both consume this.
+  # Point at a Network License Manager (NLM) reachable from the cluster.
+  mathworks:
+    # license: "port@hostname", e.g. "27000@license.example.com"
+    licenseServer: ""
+    # Alternatively, mount a license file from a Secret (key: license.lic).
+    licenseFileSecret: ""
+    # Accept the MathWorks license agreement (required for the images to start).
+    acceptLicense: false
+
+  # storageClass applied to all PVCs unless overridden per-component.
+  storageClass: ""
+
+# -----------------------------------------------------------------------------
+# Gazebo: GPU-accelerated robotics simulators, run as a scalable fleet.
+# -----------------------------------------------------------------------------
+gazebo:
+  enabled: true
+  # Number of independent simulator instances in the fleet.
+  replicaCount: 2
+
+  image:
+    repository: gazebo
+    tag: "harmonic"          # Gazebo Sim (gz) Harmonic; swap for "ignition-fortress" etc.
+    pullPolicy: IfNotPresent
+
+  # GPU per simulator. Gazebo's rendering (ogre2/EGL) needs a GPU for acceleration.
+  gpu:
+    enabled: true
+    count: 1
+
+  # World / launch configuration. The command runs the headless server by default;
+  # GUI access is provided through the noVNC sidecar when enabled.
+  world: "empty.sdf"
+  extraArgs: []              # e.g. [ "-r", "--render-engine", "ogre2" ]
+
+  # Gazebo transport (gz-transport) discovery + comms.
+  service:
+    type: ClusterIP
+    transportPort: 11345     # classic gazebo master; gz-transport uses dynamic ports + relay
+  # Headless service so each fleet member is individually addressable.
+  headless: true
+
+  # noVNC sidecar for browser-based 3D visualization of a running sim.
+  novnc:
+    enabled: true
+    image:
+      repository: theasp/novnc
+      tag: "latest"
+    port: 8080
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    # Holds world files, models, and logs.
+    mountPath: /workspace
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# MATLAB: interactive instances accessed through matlab-proxy (browser).
+# -----------------------------------------------------------------------------
+matlab:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    # Official MathWorks image. Tag is the release, e.g. r2024a / r2024b.
+    repository: mathworks/matlab
+    tag: "r2024b"
+    pullPolicy: IfNotPresent
+
+  # GPU is optional for MATLAB (Parallel Computing Toolbox / gpuArray).
+  gpu:
+    enabled: false
+    count: 1
+
+  # matlab-proxy serves the MATLAB desktop in the browser on this port.
+  service:
+    type: ClusterIP
+    port: 8888
+
+  # Per-user / per-instance home directory persistence.
+  persistence:
+    enabled: true
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    mountPath: /home/matlab
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Simulink: MATLAB-based instances dedicated to running Simulink models.
+# Modeled as headless batch runners (sim/parsim) by default; flip interactive
+# to true to expose matlab-proxy like the MATLAB component.
+# -----------------------------------------------------------------------------
+simulink:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    # Reuses the MATLAB image (Simulink ships inside MATLAB releases).
+    repository: mathworks/matlab
+    tag: "r2024b"
+    pullPolicy: IfNotPresent
+
+  gpu:
+    enabled: false
+    count: 1
+
+  # When true, runs an interactive matlab-proxy session; when false, runs a
+  # headless model-execution loop using the script in batchModel.
+  interactive: false
+
+  # MATLAB statement executed by headless runners. Override with your model name.
+  batchModel: "disp('Simulink runner ready. Override simulink.batchModel to run a model.')"
+
+  service:
+    type: ClusterIP
+    port: 8888
+
+  # Off by default: with replicaCount > 1 a single ReadWriteOnce PVC can't be
+  # shared across nodes. Enable only with replicaCount 1, or point accessMode at
+  # ReadWriteMany backed by an RWX-capable storageClass for a shared model store.
+  persistence:
+    enabled: false
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    mountPath: /home/matlab
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Optional shared ingress fronting the browser-facing components.
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: simulators.example.com
+  tls: []

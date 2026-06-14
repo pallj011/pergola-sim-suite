@@ -1,0 +1,104 @@
+{{- if .Values.simulink.enabled }}
+{{- include "suite.mathworks.assertLicense" . }}
+{{- $component := "simulink" }}
+{{- $s := .Values.simulink }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $s.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "suite.labels" . | nindent 8 }}
+        {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 8 }}
+      {{- with $s.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "suite.imagePullSecrets" . | nindent 6 }}
+      {{- if $s.gpu.enabled }}
+      {{- with include "suite.gpu.runtimeClass" (dict "ctx" .) }}
+      {{ . }}
+      {{- end }}
+      {{- end }}
+      nodeSelector:
+        {{- if $s.gpu.enabled }}
+        {{- include "suite.gpu.nodeSelector" (dict "ctx" .) | nindent 8 }}
+        {{- end }}
+        {{- with $s.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      tolerations:
+        {{- if $s.gpu.enabled }}
+        {{- include "suite.gpu.tolerations" (dict "ctx" .) | nindent 8 }}
+        {{- end }}
+        {{- with $s.tolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $s.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: simulink
+          image: {{ include "suite.image" (dict "ctx" . "repository" $s.image.repository "tag" $s.image.tag) }}
+          imagePullPolicy: {{ $s.image.pullPolicy }}
+          {{- if $s.interactive }}
+          # Interactive Simulink session via matlab-proxy.
+          args: ["-browser"]
+          {{- else }}
+          # Headless model runner: execute the configured MATLAB/Simulink statement,
+          # then idle so the pod stays Ready for the next batch via parsim/sim.
+          command: ["matlab"]
+          args:
+            - "-batch"
+            - {{ printf "%s; pause(inf)" $s.batchModel | quote }}
+          {{- end }}
+          env:
+            {{- include "suite.mathworks.env" (dict "ctx" .) | nindent 12 }}
+            {{- if $s.gpu.enabled }}
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,utility"
+            {{- end }}
+          {{- if $s.interactive }}
+          ports:
+            - name: http
+              containerPort: {{ $s.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          {{- end }}
+          resources:
+            requests:
+              {{- toYaml $s.resources.requests | nindent 14 }}
+            limits:
+              {{- toYaml $s.resources.limits | nindent 14 }}
+              {{- if $s.gpu.enabled }}
+              {{ include "suite.gpu.resources" (dict "ctx" . "count" $s.gpu.count) }}
+              {{- end }}
+          {{- if $s.persistence.enabled }}
+          volumeMounts:
+            - name: home
+              mountPath: {{ $s.persistence.mountPath }}
+          {{- end }}
+      {{- if $s.persistence.enabled }}
+      volumes:
+        - name: home
+          persistentVolumeClaim:
+            claimName: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+      {{- end }}
+{{- end }}

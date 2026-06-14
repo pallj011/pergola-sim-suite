@@ -1,0 +1,44 @@
+{{- if .Values.gazebo.enabled }}
+{{- $component := "gazebo" }}
+{{- $g := .Values.gazebo }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  type: {{ $g.service.type }}
+  selector:
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+  ports:
+    - name: transport
+      port: {{ $g.service.transportPort }}
+      targetPort: transport
+    {{- if $g.novnc.enabled }}
+    - name: novnc
+      port: {{ $g.novnc.port }}
+      targetPort: novnc
+    {{- end }}
+{{- if $g.headless }}
+---
+# Headless service: gives each fleet member a stable DNS name
+# (<sts>-<ordinal>.<svc>) for direct, per-instance addressing.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}-headless
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+  ports:
+    - name: transport
+      port: {{ $g.service.transportPort }}
+      targetPort: transport
+{{- end }}
+{{- end }}

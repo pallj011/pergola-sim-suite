@@ -1,0 +1,93 @@
+{{- if .Values.matlab.enabled }}
+{{- include "suite.mathworks.assertLicense" . }}
+{{- $component := "matlab" }}
+{{- $m := .Values.matlab }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $m.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "suite.labels" . | nindent 8 }}
+        {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 8 }}
+      {{- with $m.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "suite.imagePullSecrets" . | nindent 6 }}
+      {{- if $m.gpu.enabled }}
+      {{- with include "suite.gpu.runtimeClass" (dict "ctx" .) }}
+      {{ . }}
+      {{- end }}
+      {{- end }}
+      nodeSelector:
+        {{- if $m.gpu.enabled }}
+        {{- include "suite.gpu.nodeSelector" (dict "ctx" .) | nindent 8 }}
+        {{- end }}
+        {{- with $m.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      tolerations:
+        {{- if $m.gpu.enabled }}
+        {{- include "suite.gpu.tolerations" (dict "ctx" .) | nindent 8 }}
+        {{- end }}
+        {{- with $m.tolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $m.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: matlab
+          image: {{ include "suite.image" (dict "ctx" . "repository" $m.image.repository "tag" $m.image.tag) }}
+          imagePullPolicy: {{ $m.image.pullPolicy }}
+          # Launch matlab-proxy so the desktop is reachable in a browser.
+          args: ["-browser"]
+          env:
+            {{- include "suite.mathworks.env" (dict "ctx" .) | nindent 12 }}
+            {{- if $m.gpu.enabled }}
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,utility"
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $m.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              {{- toYaml $m.resources.requests | nindent 14 }}
+            limits:
+              {{- toYaml $m.resources.limits | nindent 14 }}
+              {{- if $m.gpu.enabled }}
+              {{ include "suite.gpu.resources" (dict "ctx" . "count" $m.gpu.count) }}
+              {{- end }}
+          {{- if $m.persistence.enabled }}
+          volumeMounts:
+            - name: home
+              mountPath: {{ $m.persistence.mountPath }}
+          {{- end }}
+      {{- if $m.persistence.enabled }}
+      volumes:
+        - name: home
+          persistentVolumeClaim:
+            claimName: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,23 @@
+apiVersion: v2
+name: pergola-sim-suite
+description: >-
+  GPU-accelerated simulation suite for Kubernetes. Deploys Gazebo simulators,
+  MATLAB, and Simulink instances as a single coordinated suite.
+type: application
+version: 0.1.2
+# appVersion tracks the suite as a whole; individual component image tags are set in values.yaml.
+appVersion: "1.0.0"
+keywords:
+  - gazebo
+  - matlab
+  - simulink
+  - simulation
+  - gpu
+  - robotics
+home: https://github.com/example/pergola-sim-suite
+maintainers:
+  - name: john
+    email: john.palli@gmail.com
+annotations:
+  category: Simulation
+  licenses: Apache-2.0
