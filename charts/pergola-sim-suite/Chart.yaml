@@ -4,9 +4,9 @@ description: >-
   GPU-accelerated simulation suite for Kubernetes. Deploys Gazebo simulators,
   MATLAB, and Simulink instances as a single coordinated suite.
 type: application
-version: 0.1.0
+version: 0.1.1
 # appVersion tracks the suite as a whole; individual component image tags are set in values.yaml.
-appVersion: "1.0.1"
+appVersion: "1.0.0"
 keywords:
   - gazebo
   - matlab
