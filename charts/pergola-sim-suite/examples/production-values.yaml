@@ -1,0 +1,75 @@
+# Example production configuration for the pergola-sim-suite.
+# Apply with: helm install sims ./pergola-sim-suite -f examples/production-values.yaml
+
+global:
+  imageRegistry: "registry.example.com/"
+  imagePullSecrets:
+    - name: regcred
+  gpu:
+    resourceName: nvidia.com/gpu
+    runtimeClassName: nvidia
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+  mathworks:
+    licenseServer: "27000@license.example.com"
+    acceptLicense: true
+  storageClass: fast-ssd
+
+# A fleet of 8 GPU simulators.
+gazebo:
+  enabled: true
+  replicaCount: 8
+  image:
+    tag: harmonic
+  gpu:
+    enabled: true
+    count: 1
+  world: "warehouse.sdf"
+  extraArgs: ["-r", "--render-engine", "ogre2"]
+  novnc:
+    enabled: true
+  persistence:
+    enabled: true
+    size: 50Gi
+
+# Interactive MATLAB seats, GPU-backed for gpuArray/Parallel Computing Toolbox.
+matlab:
+  enabled: true
+  replicaCount: 3
+  image:
+    tag: r2024b
+  gpu:
+    enabled: true
+    count: 1
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: fast-ssd
+
+# Headless Simulink batch runners scaled wide; no shared PVC needed.
+simulink:
+  enabled: true
+  replicaCount: 6
+  image:
+    tag: r2024b
+  interactive: false
+  batchModel: "load_system('myModel'); sim('myModel')"
+  gpu:
+    enabled: false
+  persistence:
+    enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  host: sims.example.com
+  tls:
+    - secretName: sims-tls
+      hosts:
+        - sims.example.com

@@ -1,0 +1,51 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "suite.fullname" . }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          {{- if .Values.matlab.enabled }}
+          - path: /matlab
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "suite.componentFullname" (dict "Release" .Release "component" "matlab") }}
+                port:
+                  number: {{ .Values.matlab.service.port }}
+          {{- end }}
+          {{- if and .Values.simulink.enabled .Values.simulink.interactive }}
+          - path: /simulink
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "suite.componentFullname" (dict "Release" .Release "component" "simulink") }}
+                port:
+                  number: {{ .Values.simulink.service.port }}
+          {{- end }}
+          {{- if and .Values.gazebo.enabled .Values.gazebo.novnc.enabled }}
+          - path: /gazebo
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "suite.componentFullname" (dict "Release" .Release "component" "gazebo") }}
+                port:
+                  number: {{ .Values.gazebo.novnc.port }}
+          {{- end }}
+{{- end }}

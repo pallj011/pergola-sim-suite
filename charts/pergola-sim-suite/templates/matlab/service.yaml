@@ -1,0 +1,19 @@
+{{- if .Values.matlab.enabled }}
+{{- $component := "matlab" }}
+{{- $m := .Values.matlab }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  type: {{ $m.service.type }}
+  selector:
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $m.service.port }}
+      targetPort: http
+{{- end }}

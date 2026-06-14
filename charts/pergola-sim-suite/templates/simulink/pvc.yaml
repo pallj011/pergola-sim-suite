@@ -1,0 +1,21 @@
+{{- if and .Values.simulink.enabled .Values.simulink.persistence.enabled }}
+{{- $component := "simulink" }}
+{{- $s := .Values.simulink }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "suite.componentFullname" (dict "Release" .Release "component" $component) }}
+  labels:
+    {{- include "suite.labels" . | nindent 4 }}
+    {{- include "suite.selectorLabels" (dict "ctx" . "component" $component) | nindent 4 }}
+spec:
+  accessModes:
+    - {{ $s.persistence.accessMode }}
+  {{- $sc := $s.persistence.storageClass | default .Values.global.storageClass }}
+  {{- if $sc }}
+  storageClassName: {{ $sc }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $s.persistence.size }}
+{{- end }}

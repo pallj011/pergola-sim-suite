@@ -1,0 +1,8 @@
+# chart-testing (ct) configuration.
+target-branch: main
+chart-dirs:
+  - charts
+# Lint every chart on each run (single-chart repo), not just changed ones.
+all: true
+# The maintainer name in Chart.yaml is not required to be a GitHub username.
+validate-maintainers: false
